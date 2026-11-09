@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AutoNod dashboard</title>
+  <link rel="icon" href="icons/icon32.png" />
+  <script src="theme.js"></script>
+  <link rel="stylesheet" href="ui.css" />
+  <style>
+    /* Dashboard: the website's activity window as a full Chrome tab.
+       Left menu, the list in the middle, the open card on the right. */
+    html, body { height: 100%; }
+    body { display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--bg); }
+
+    /* top bar */
+    .bar0 { display: flex; align-items: center; gap: 14px; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--surface); }
+    .crumb { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); white-space: nowrap; }
+    .crumb img { width: 28px; height: 28px; border-radius: 8px; }
+    .crumb b { color: var(--ink); font-weight: 600; font-size: 15px; }
+    .crumb i { font-style: normal; color: var(--faint); }
+    .crumb em { font-style: normal; color: var(--ink); font-weight: 600; }
+    .find { margin-left: auto; display: flex; align-items: center; gap: 8px; width: min(340px, 40vw); height: 36px; padding: 0 12px; border-radius: 10px; background: var(--raise); color: var(--muted); }
+    .find input { flex: 1; min-width: 0; border: 0; background: none; outline: none; color: var(--ink); font-size: 13px; }
+    .find kbd { font: 600 11px "Instrument Sans", sans-serif; border: 1px solid var(--line-2); border-radius: 6px; padding: 0 6px; }
+    .find:focus-within { box-shadow: 0 0 0 2px var(--accent); }
+    .onoff { display: flex; align-items: center; gap: 10px; font-weight: 600; white-space: nowrap; }
+    .onoff small { color: var(--muted); font-weight: 500; }
+
+    /* frame */
+    .app { display: grid; grid-template-columns: 230px minmax(0, 1fr); min-height: 0; }
+    aside { border-right: 1px solid var(--line); padding: 14px 12px; display: flex; flex-direction: column; gap: 2px; background: var(--surface); overflow-y: auto; }
+    aside .nav { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: 0; border-radius: 10px; background: none; color: var(--muted); font-weight: 500; font-size: 14px; cursor: pointer; text-align: left; transition: background .15s, color .15s; }
+    aside .nav:hover { background: var(--raise); color: var(--ink); }
+    aside .nav[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+    aside .nav em { margin-left: auto; font-style: normal; font-size: 12px; font-weight: 600; color: var(--faint); font-variant-numeric: tabular-nums; }
+    aside .nav em.warn { color: var(--wait); }
+    aside .nav em:empty { display: none; }
+    aside .sep { margin: 16px 10px 6px; font-size: 12px; font-weight: 600; color: var(--faint); }
+    aside .foot { margin-top: auto; padding: 12px 10px 0; font-size: 12px; color: var(--faint); line-height: 1.5; }
+    .tabstate { margin: 0 10px; }
+    .tabstate .state { margin-top: 0; }
+
+    main { overflow-y: auto; min-width: 0; }
+    .view[hidden] { display: none; }
+    .view { padding: 24px 28px 40px; animation: viewIn .3s var(--ease); }
+    @keyframes viewIn { from { opacity: 0; transform: translateY(4px); } }
+    .view .box { margin: 0; }
+    .h { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+    .h h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -.02em; }
+    .h p { margin: 4px 0 0; color: var(--muted); }
+
+    /* home: four numbers */
+    .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .tile { margin: 0; padding: 16px 18px; }
+    .tile small { display: block; color: var(--muted); font-size: 12px; font-weight: 600; }
+    .tile b { display: block; margin-top: 6px; font-size: 32px; font-weight: 600; letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+    .tile.warn b { color: var(--wait); }
+    .tile .big { font-size: 32px; text-align: left; }
+    .grid2 { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 16px; align-items: start; }
+    .col { display: grid; gap: 16px; }
+    .card { margin: 0; }
+    .card > .hd { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); font-weight: 600; }
+    .card > .hd button { border: 0; background: none; color: var(--accent); font-weight: 600; cursor: pointer; padding: 0; }
+    .card .pad { padding: 14px 16px; }
+
+    /* list + open card (the website's app window) */
+    .split { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 0; height: calc(100vh - 210px); min-height: 420px; margin: 0; }
+    .split .list { overflow-y: auto; border-right: 1px solid var(--line); }
+    .split .open { overflow-y: auto; }
+    .filters { display: flex; gap: 6px; flex-wrap: wrap; }
+    .filters button { border: 1px solid var(--line-2); background: var(--surface); color: var(--muted); border-radius: 99px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; transition: background .15s, color .15s; }
+    .filters button:hover { color: var(--ink); }
+    .filters button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+    .filters em { font-style: normal; opacity: .7; margin-left: 3px; }
+    .feed li { cursor: pointer; transition: background .15s; }
+    .feed li:hover { background: var(--raise); }
+    .feed li.sel { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+    .feed li.empty { cursor: default; background: none; box-shadow: none; }
+
+    /* the open card: Muse's approval card as AutoNod saw it */
+    .ask { padding: 22px; display: grid; gap: 16px; }
+    .ask .who { display: flex; align-items: center; gap: 12px; }
+    .ask .who .fav { width: 44px; height: 44px; border-radius: 12px; }
+    .ask .who .fav img { width: 26px; height: 26px; }
+    .ask .who b { display: block; font-size: 17px; font-weight: 600; }
+    .ask .who small { color: var(--muted); }
+    .museCard { border: 1px solid var(--line-2); border-radius: 14px; padding: 14px 16px; background: var(--bg); display: grid; gap: 12px; }
+    .museCard .from { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); font-weight: 600; }
+    .museCard .from img { width: 16px; height: 16px; border-radius: 4px; }
+    .museCard p { margin: 0; font-size: 15px; line-height: 1.5; }
+    .acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .acts span { height: 32px; padding: 0 14px; border-radius: 9px; display: inline-flex; align-items: center; font-weight: 600; background: var(--raise); color: var(--muted); }
+    .acts span.on { background: var(--accent); color: var(--accent-ink); }
+    .acts span.waiting { background: var(--wait-bg); color: var(--wait); border: 1px dashed var(--wait); }
+    .acts .by { background: none; padding: 0 4px; color: var(--accent); gap: 6px; }
+    .acts .by img { width: 16px; height: 16px; border-radius: 4px; }
+    .facts { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 8px 12px; margin: 0; font-size: 13px; }
+    .facts dt { color: var(--muted); }
+    .facts dd { margin: 0; overflow-wrap: anywhere; }
+    .raw { font: 12px/1.5 Consolas, monospace; color: var(--muted); background: var(--raise); border-radius: 10px; padding: 10px 12px; overflow-wrap: anywhere; }
+    .openBtn { justify-self: start; border: 0; border-radius: 10px; padding: 9px 14px; font-weight: 600; background: var(--wait); color: var(--bg); cursor: pointer; }
+
+    /* passwords table */
+    .vrow { display: grid; grid-template-columns: 30px minmax(0, 1.4fr) minmax(0, 1.4fr) minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 11px 16px; border-top: 1px solid var(--line); }
+    .vrow.head { border-top: 0; font-size: 12px; font-weight: 600; color: var(--faint); padding-top: 12px; padding-bottom: 8px; }
+    .vrow .site { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .vrow .mail, .vrow .when { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .vrow .fav { grid-row: auto; }
+    .pw { font-family: Consolas, monospace; font-size: 12px; color: var(--faint); letter-spacing: 1px; min-width: 140px; }
+    .pw.shown { color: var(--ink); letter-spacing: 0; }
+    .ibtn { border: 1px solid var(--line-2); background: var(--surface); color: var(--muted); width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; cursor: pointer; transition: color .15s, border-color .15s, background .15s; }
+    .ibtn:hover { color: var(--accent); border-color: var(--accent); }
+    .ibtn.done { color: var(--ok); border-color: var(--ok); background: var(--ok-bg); }
+    .danger { border: 0; background: none; color: var(--muted); font-weight: 600; cursor: pointer; }
+    .danger:hover, .danger.sure { color: var(--red); }
+
+    /* settings */
+    .set { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+    .field { display: grid; gap: 6px; padding: 14px 16px; font-size: 12px; font-weight: 600; color: var(--muted); border-top: 1px solid var(--line); }
+    .field:first-child { border-top: 0; }
+    .inp { width: 100%; height: 40px; padding: 0 12px; border: 1px solid var(--line-2); border-radius: 10px; font-size: 14px; font-weight: 400; color: var(--ink); background: var(--bg); outline: none; }
+    .inp:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+    #status { min-height: 18px; padding: 0 16px 12px; color: var(--ok); font-size: 12px; font-weight: 600; }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 13px 16px; border-top: 1px solid var(--line); cursor: pointer; }
+    .row:first-child { border-top: 0; }
+    .row div { font-weight: 600; }
+    .row small { display: block; color: var(--muted); font-size: 12px; font-weight: 400; margin-top: 1px; }
+    body.paused .toggles, body.paused .modesBox { opacity: .5; }
+    .note { margin: 0; padding: 14px 16px; color: var(--muted); line-height: 1.6; }
+
+    @media (max-width: 1100px) {
+      .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .grid2, .set { grid-template-columns: minmax(0, 1fr); }
+    }
+    @media (max-width: 820px) {
+      .app { grid-template-columns: minmax(0, 1fr); }
+      aside { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 8px; }
+      aside .sep, aside .foot, .tabstate { display: none; }
+      aside .nav { width: auto; white-space: nowrap; }
+      .split { grid-template-columns: minmax(0, 1fr); height: auto; }
+      .split .open { display: none; }
+      .view { padding: 18px 16px 32px; }
+      .find { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bar0">
+    <div class="crumb"><img src="icons/icon48.png" alt="" /><b>AutoNod</b><i>/</i><em id="crumb">Home</em></div>
+    <label class="find"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg><input id="find" type="search" placeholder="Search activity and passwords" aria-label="Search" /><kbd>/</kbd></label>
+    <button class="iconBtn" data-theme-btn style="margin-left:0"></button>
+    <label class="onoff"><span><span id="stateText">On</span> <small>for Muse</small></span><input type="checkbox" class="sw" id="enabled" aria-label="Turn AutoNod on or off" /></label>
+  </div>
+
+  <div class="app">
+    <aside>
+      <button class="nav" data-view="overview"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M2.5 7.5 8 3l5.5 4.5V13h-11z"/></svg>Home</button>
+      <button class="nav" data-view="activity"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M2.5 9h3l1 1.5h3l1-1.5h3"/><path d="M2.5 9 4 3.5h8L13.5 9v3.5h-11z"/></svg>Activity<em id="cAll"></em></button>
+      <button class="nav" data-view="activity" data-filter="wait"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 1.5"/></svg>Waiting<em class="warn" id="cWait"></em></button>
+      <button class="nav" data-view="vault"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3.5" y="7" width="9" height="6.5" rx="1"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>Passwords<em id="cPw"></em></button>
+      <button class="nav" data-view="settings"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="2"/><path d="M8 2.5v2M8 11.5v2M2.5 8h2M11.5 8h2M4.1 4.1l1.4 1.4M10.5 10.5l1.4 1.4M4.1 11.9l1.4-1.4M10.5 5.5l1.4-1.4"/></svg>Settings</button>
+      <div class="sep">muse.ai</div>
+      <div class="tabstate"><div class="state" id="bar">Checking…</div></div>
+      <div class="foot">Independent extension · not made by or affiliated with Muse</div>
+    </aside>
+
+    <main>
+      <!-- HOME -->
+      <section class="view" id="overview">
+        <div class="h"><div><h1>Home</h1><p id="hello">What AutoNod did for you</p></div></div>
+        <div class="bar bad" id="needEmail" style="display:none;margin:0 0 16px"><span>Add your email so AutoNod can fill Secure Store logins</span><button id="goSettings">Add email</button></div>
+        <div class="tiles">
+          <div class="box tile"><small>Approved today</small><b class="big" id="today">0</b></div>
+          <div class="box tile"><small>Approved, all time</small><b id="allApproved">0</b></div>
+          <div class="box tile"><small>Passwords made</small><b id="allPw">0</b></div>
+          <div class="box tile" id="waitTile"><small>Waiting for you</small><b id="waitNum">0</b></div>
+        </div>
+        <div class="grid2">
+          <div class="box card">
+            <div class="hd">Latest <button data-goto="activity">See all</button></div>
+            <ul class="feed" id="recent"></ul>
+          </div>
+          <div class="col">
+            <div class="box card" id="needYou" hidden>
+              <div class="hd" style="color:var(--wait)"><span id="waitTitle"></span><button id="openMuse" style="color:var(--wait)">Open muse.ai</button></div>
+              <ul class="feed" id="waitList"></ul>
+            </div>
+            <div class="box card modesBox">
+              <div class="hd">Mode</div>
+              <div class="pad">
+                <div class="seg" id="modes" role="radiogroup" aria-label="Mode">
+                  <button role="radio" data-mode="safe">Safe</button>
+                  <button role="radio" data-mode="standard">Standard</button>
+                  <button role="radio" data-mode="autopilot">Autopilot</button>
+                </div>
+                <div class="mdesc" id="modeDesc"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ACTIVITY: list + the open card -->
+      <section class="view" id="activity" hidden>
+        <div class="h">
+          <div><h1>Activity</h1><p>The last 50 cards and logins AutoNod handled</p></div>
+          <div class="filters" id="filters" role="group" aria-label="Show">
+            <button data-f="all" aria-pressed="true">All<em id="nAll"></em></button>
+            <button data-f="ok" aria-pressed="false">Allowed<em id="nOk"></em></button>
+            <button data-f="login" aria-pressed="false">Logins<em id="nLogin"></em></button>
+            <button data-f="wait" aria-pressed="false">Waited<em id="nWait"></em></button>
+          </div>
+        </div>
+        <div class="box split">
+          <div class="list"><ul class="feed" id="feed"></ul></div>
+          <div class="open" id="open"></div>
+        </div>
+        <div style="margin-top:12px;text-align:right"><button class="danger" id="clearLog">Clear activity</button></div>
+      </section>
+
+      <!-- PASSWORDS -->
+      <section class="view" id="vault" hidden>
+        <div class="h"><div><h1>Passwords</h1><p>Made by AutoNod for Secure Store logins, saved in this Chrome only</p></div><button class="danger" id="clearCreds">Clear all</button></div>
+        <div class="box">
+          <div class="vrow head"><span></span><span>Site</span><span>Email</span><span>Made</span><span>Password</span><span></span></div>
+          <div id="creds"></div>
+        </div>
+      </section>
+
+      <!-- SETTINGS -->
+      <section class="view" id="settings" hidden>
+        <div class="h"><div><h1>Settings</h1><p>Saved as you type</p></div></div>
+        <div class="set">
+          <div class="col">
+            <div class="box card">
+              <div class="hd">Login details</div>
+              <label class="field">Email used as username<input class="inp" type="email" id="email" placeholder="you@example.com" /></label>
+              <label class="field">Password length (8 to 64)<input class="inp" type="number" id="pwLength" min="8" max="64" /></label>
+              <div id="status"></div>
+            </div>
+            <div class="box card">
+              <div class="hd">Appearance</div>
+              <div class="pad">
+                <div class="seg" role="radiogroup" aria-label="Theme">
+                  <button role="radio" data-theme-opt="auto">Auto</button>
+                  <button role="radio" data-theme-opt="light">Light</button>
+                  <button role="radio" data-theme-opt="dark">Dark</button>
+                </div>
+                <div class="mdesc">Auto follows your computer's light or dark setting.</div>
+              </div>
+              <label class="row"><div>Show site icons<small>Loads each site's icon from Google by its name. Off: a letter instead.</small></div><input type="checkbox" class="sw" id="siteIcons" /></label>
+            </div>
+          </div>
+          <div class="col">
+            <div class="box card toggles">
+              <div class="hd">What AutoNod clicks</div>
+              <label class="row"><div>Auto approve<small>Clicks Allow on approval cards.</small></div><input type="checkbox" class="sw" id="autoApprove" /></label>
+              <label class="row"><div>Prefer "Always allow"<small>Fewer cards next time on the same site.</small></div><input type="checkbox" class="sw" id="preferAlways" /></label>
+              <label class="row"><div>Secure Store auto-fill<small>Your email and a new strong password, then Enter.</small></div><input type="checkbox" class="sw" id="secureStore" /></label>
+              <label class="row"><div>Fill login forms<small>Only forms inside Muse tasks, never Muse's own pages.</small></div><input type="checkbox" class="sw" id="autoFillForms" /></label>
+              <label class="row"><div>Reply in chat<small>Sends email and password when Muse asks in chat. Not recommended.</small></div><input type="checkbox" class="sw" id="chatReply" /></label>
+              <label class="row" style="cursor:default"><div>Payments and checkout<small>Never clicked, in every mode.</small></div><input type="checkbox" class="sw" disabled aria-label="Payments are never clicked" /></label>
+            </div>
+            <div class="box card">
+              <div class="hd">Privacy</div>
+              <p class="note">Your email and passwords are saved only in this Chrome profile, on this computer, and never sent anywhere. Anyone who uses this Chrome profile can open this dashboard and see them. Site icons are loaded from Google by site name only.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="modes.js"></script>
+  <script src="feed.js"></script>
+  <script src="dashboard.js"></script>
+</body>
+</html>

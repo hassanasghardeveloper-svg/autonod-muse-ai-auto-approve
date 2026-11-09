@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <script src="theme.js"></script>
+  <link rel="stylesheet" href="ui.css" />
+  <style>
+    /* Popup: the minimal view. Same look as the dashboard and the website. */
+    html, body { overflow: hidden; }
+    body { width: 340px; padding-bottom: 12px; }
+    .top { border-bottom: 1px solid var(--line); }
+    .hero { padding: 16px 16px 12px; }
+    .hero .big { font-size: 40px; }
+    .hero .state { margin-top: 10px; }
+    /* the popup stays under Chrome's 600px: one line of mode text (the dashboard shows all of it) */
+    .modes .mdesc { display: none; }
+    .wait .feed .meta { display: none; }
+    .wait .feed li { grid-template-columns: 30px minmax(0, 1fr); padding: 9px 12px; }
+
+    /* cards waiting for you: like the website's toolbar popover */
+    .wait { margin: 12px 12px 0; border-radius: var(--r); border: 1px solid var(--wait-line); background: var(--wait-bg); overflow: hidden; cursor: pointer; }
+    .wait[hidden] { display: none; }
+    .wait .wh { display: flex; align-items: center; gap: 8px; padding: 10px 12px; color: var(--wait); font-weight: 600; }
+    .wait .wh::after { content: "›"; margin-left: auto; font-size: 16px; line-height: 1; }
+    .wait .feed { background: var(--surface); }
+    .wait .feed li { border-top: 1px solid var(--line); padding: 9px 12px; }
+
+    .last { margin: 0 12px; }
+    .last .feed li { padding: 10px 12px; }
+
+    .modes { margin: 12px 12px 0; padding: 12px; }
+    .modes .lbl { margin: 0 0 8px; }
+
+    .links { margin: 12px 12px 0; }
+    .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 12px 14px; border: 0; border-top: 1px solid var(--line); background: none; text-align: left; cursor: pointer; font-weight: 600; transition: background .15s; }
+    .row:first-child { border-top: 0; }
+    .row:hover { background: var(--raise); }
+    .row span { color: var(--muted); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 190px; }
+    .row span::after { content: "  ›"; color: var(--faint); }
+    .row span.add { color: var(--accent); font-weight: 600; }
+
+    .btn { display: block; width: calc(100% - 24px); margin: 12px 12px 0; height: 42px; border: 0; border-radius: 12px; background: var(--accent); color: var(--accent-ink); font-weight: 600; font-size: 14px; cursor: pointer; transition: transform .15s var(--ease), filter .15s; }
+    .btn:hover { filter: brightness(1.08); transform: translateY(-1px); }
+    .btn:active { transform: translateY(0) scale(.98); }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <img src="icons/icon48.png" alt="" />
+    <div><b>AutoNod</b><small id="stateText">for Muse</small></div>
+    <button class="iconBtn" data-theme-btn></button>
+    <input type="checkbox" class="sw" id="enabled" aria-label="Turn AutoNod on or off" title="On / Off" />
+  </header>
+
+  <div class="wait" id="needYou" role="button" tabindex="0" hidden>
+    <div class="wh" id="waitTitle"></div>
+    <ul class="feed" id="waitList"></ul>
+  </div>
+
+  <div class="hero">
+    <div class="big" id="today">0</div>
+    <small>cards approved today</small>
+    <div class="state" id="bar">Checking…</div>
+  </div>
+
+  <div class="box last" id="lastBox" hidden><ul class="feed" id="last"></ul></div>
+
+  <div class="box modes">
+    <div class="lbl">Mode</div>
+    <div class="seg" id="modes" role="radiogroup" aria-label="Mode">
+      <button role="radio" data-mode="safe">Safe</button>
+      <button role="radio" data-mode="standard">Standard</button>
+      <button role="radio" data-mode="autopilot">Autopilot</button>
+    </div>
+    <div class="mdesc" id="modeDesc"></div>
+  </div>
+
+  <div class="box links">
+    <button class="row" id="goVault">Saved passwords <span id="pwCount">0</span></button>
+    <button class="row" id="goEmail">Email <span id="emailText"></span></button>
+  </div>
+
+  <button class="btn" id="openPanel">Open dashboard</button>
+
+  <script src="modes.js"></script>
+  <script src="feed.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

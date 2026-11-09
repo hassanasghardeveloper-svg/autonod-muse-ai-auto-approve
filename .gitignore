@@ -1,0 +1,5 @@
+.playwright-mcp/
+brag-output/
+*.zip
+.DS_Store
+Thumbs.db
