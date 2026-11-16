@@ -2,9 +2,9 @@
 
 <img src="icons/icon128.png" width="96" alt="AutoNod icon - auto approve extension for Muse AI">
 
-# AutoNod: Auto Approve Extension for Muse AI
+# AutoNod: Auto Approve Extension for Meta Muse AI
 
-**Muse, without the interruptions.** A free Chrome extension that auto-clicks **Allow** on safe Muse AI approval cards, fills **Secure Store** logins for you, and never touches payment cards.
+**Muse, without the interruptions.** A free Chrome extension for **Muse, the AI agent from Meta** (muse.ai). It auto-clicks **Allow**, *Share reel*, *Post* and other buttons on Muse AI approval cards, fills **Secure Store** logins for you, and never touches payment cards.
 
 [![Download](https://img.shields.io/badge/Download-AutoNod.zip-2f81f7?style=for-the-badge&logo=googlechrome&logoColor=white)](https://github.com/hassanasghardeveloper-svg/autonod-muse-ai-auto-approve/releases/latest/download/AutoNod.zip)
 [![Version](https://img.shields.io/github/v/release/hassanasghardeveloper-svg/autonod-muse-ai-auto-approve?style=for-the-badge&color=5ab9fc)](https://github.com/hassanasghardeveloper-svg/autonod-muse-ai-auto-approve/releases/latest)
@@ -21,7 +21,7 @@
 
 ## Why AutoNod?
 
-If you run long tasks in **Muse AI** (business directory listings, scheduled Facebook / Instagram / YouTube / Pinterest posts, research), Muse stops every few steps and asks *"Allow?"*. You sit and click **Allow** again and again.
+If you run long tasks in **Muse AI** (Meta's personal AI agent at muse.ai) (business directory listings, scheduled Facebook / Instagram / YouTube / Pinterest posts, research), Muse stops every few steps and asks *"Allow?"*. You sit and click **Allow** again and again.
 
 **AutoNod clicks it for you**, safely:
 
@@ -102,3 +102,7 @@ Found a bug or have an idea? [Open an issue](https://github.com/hassanasghardeve
 ---
 
 <sub>Keywords: Muse AI auto approve, Muse auto allow, Muse AI Chrome extension, auto click Allow, Muse Secure Store autofill, AI browser agent approvals, auto approve permission cards.</sub>
+
+---
+
+<sub>Keywords: Meta Muse auto approve, Muse AI auto approve, muse.ai auto allow, auto click Allow Muse, Muse AI agent Chrome extension, Muse Secure Store autofill, Muse "tasks need review" auto, Meta AI agent approval automation. AutoNod is an independent, unofficial extension and is not made by or affiliated with Meta or Muse.</sub>
