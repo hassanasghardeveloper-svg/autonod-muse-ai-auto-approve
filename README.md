@@ -28,7 +28,11 @@ If you run long tasks in **Muse AI** (business directory listings, scheduled Fac
 - ✅ **Auto-approves safe cards.** Clicks *Allow* / *Always allow* on Muse permission cards.
 - 🔑 **Fills Secure Store logins.** Clicks *Add*, puts **your email** in Username, generates a strong password and presses Enter.
 - ✋ **Waits on money.** Payment, checkout and purchase cards are **never** clicked, in any mode.
-- 🔴 **Red badge.** Cards that need you show a count on the AutoNod icon.
+- ▶️ **Presses action buttons too.** *Share reel*, *Post*, *Publish*, *Upload*, *Send*, *Save*... in Standard mode. Only delete and payment buttons wait.
+- 👀 **Opens Review by itself.** Presses Muse's *"N tasks need review"* bar so hidden cards show up.
+- 🪟 **Works in the background.** Keeps going when the Muse tab is in the background or the window is minimized.
+- 🔴 **Badge + notification.** Cards that need you show a count on the AutoNod icon and a Windows/Mac notification.
+- 🔐 **Password lock.** Lock saved passwords with your own lock password (encrypted).
 - 📋 **Dashboard.** Home, Activity, Waiting, Passwords and Settings in its own tab, with a full log of every card.
 - 🌙 **Light and dark mode.**
 - 🔒 **Private.** Everything stays in your Chrome. No servers, no analytics, no account.
@@ -40,8 +44,8 @@ If you run long tasks in **Muse AI** (business directory listings, scheduled Fac
 | Mode | What gets auto-approved | What waits for you |
 |---|---|---|
 | **Safe** | Website cards only | Posts, messages, deletes, payments |
-| **Standard** *(recommended)* | + post permissions (e.g. Facebook "create, edit, publish"), Secure Store logins | Single deletes, *Send* / *Post* buttons, payments |
-| **Autopilot** | Everything + login forms | Payments (always) |
+| **Standard** *(recommended)* | + post permissions, action buttons (*Share reel*, *Post*, *Upload*, *Send*...), Secure Store logins | Deletes, payments |
+| **Autopilot** | Everything | Payments (always) |
 
 ## Install in 2 minutes
 
@@ -70,9 +74,9 @@ If you run long tasks in **Muse AI** (business directory listings, scheduled Fac
 
 **Is AutoNod free?** Yes, completely free and open source (MIT).
 
-**Is it safe?** Payment cards always wait for you. Only buttons that say *Allow*, *Approve* or *Always allow* are clicked. Action buttons like *Send* or *Post* wait in Safe and Standard mode. The code is right here, so you can read every line.
+**Is it safe?** Payment cards always wait for you. Delete and payment buttons wait for you in Safe and Standard mode. Action buttons like *Send* or *Post* wait in Safe mode (turn off "Action buttons" in Settings to make them wait in Standard too). *Always allow* is never used for sending, posting or deleting, so nothing gets a permanent pass by accident. The code is right here, so you can read every line.
 
-**Where are my passwords stored?** Only in your Chrome's local extension storage. They are never sent anywhere. Note: they are not encrypted, so anyone using your computer can see them in the dashboard.
+**Where are my passwords stored?** Only in your Chrome's local extension storage. They are never sent anywhere. Turn on **Lock passwords** (Dashboard > Passwords) to keep them encrypted; you then need your lock password to see or copy them.
 
 **What permissions does it need?** Only `storage` and `scripting`, on `muse.ai` only.
 

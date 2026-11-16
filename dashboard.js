@@ -8,11 +8,13 @@ const DEFAULTS = {
   autoFillForms: false,
   chatReply: false,
   secureStore: true,
+  approvePosts: true,
+  openReview: true,
   email: "",
   pwLength: 16,
   siteIcons: true,
 };
-const TOGGLES = ["enabled", "autoApprove", "preferAlways", "autoFillForms", "chatReply", "secureStore", "siteIcons"];
+const TOGGLES = ["enabled", "autoApprove", "preferAlways", "secureStore", "approvePosts", "openReview", "siteIcons"];
 const MASK = "••••••••••••";
 const $ = (id) => document.getElementById(id);
 const renderModes = setupModes($("modes"), $("modeDesc"));
@@ -183,42 +185,147 @@ async function openMuse() {
 $("openMuse").addEventListener("click", openMuse);
 
 // ---------- passwords ----------
+// Password lock (vault.js): with a lock, saved passwords are stored locked ("enc").
+// Unlocking keeps the key in THIS tab's memory only.
+let vaultKey = null; // unlocked private key, or null
+const opened = new Map(); // locked text -> plain password (only while unlocked)
+let afterUnlock = null; // what to do once unlocked (show / copy a row)
+
+const isLocked = (c) => !!c.enc && !opened.has(c.enc);
+const plainOf = (c) => (c.enc ? opened.get(c.enc) : c.password);
+
+async function openAll() {
+  if (!vaultKey) return;
+  for (const c of state.creds) {
+    if (c.enc && !opened.has(c.enc)) {
+      try { opened.set(c.enc, await Vault.open(vaultKey, c.enc)); } catch (_) {}
+    }
+  }
+}
+
 function renderVault() {
   const q = query();
   const list = state.creds.map((c, i) => ({ c, i })).filter(({ c }) => !q || `${siteOf(c)} ${c.email}`.toLowerCase().includes(q));
   $("creds").innerHTML = list.length
     ? list.map(({ c, i }) => {
-        const on = revealed.has(i);
+        const on = revealed.has(i) && !isLocked(c);
         const site = siteOf(c);
         return `<div class="vrow">${favicon(site)}<span class="site">${esc(site)}</span><span class="mail">${esc(c.email)}</span><span class="when">${ago(c.t)}</span>
-          <span class="pw${on ? " shown" : ""}">${on ? esc(c.password) : MASK}</span>
+          <span class="pw${on ? " shown" : ""}">${on ? esc(plainOf(c)) : MASK}</span>
           <span style="display:flex;gap:6px"><button class="ibtn" data-show="${i}" aria-label="${on ? "Hide" : "Show"} password for ${esc(site)}">${on ? I.eyeOff : I.eye}</button>
           <button class="ibtn" data-copy="${i}" aria-label="Copy password for ${esc(site)}">${I.copy}</button></span></div>`;
       }).join("")
     : `<div class="empty"><b>${q ? "No match" : "No passwords yet"}</b>${q ? "Search by site or email." : "AutoNod saves one here each time it fills a Secure Store login."}</div>`;
+  renderLock();
 }
+
+// the header button + the small form above the list
+let lockOpen = false;
+function renderLock() {
+  const has = !!state.vault;
+  $("lockBtn").textContent = !has ? "Lock passwords" : vaultKey ? "Lock now" : "Unlock";
+  $("lockBox").hidden = !lockOpen;
+  $("lockPass2").hidden = has; // only asked twice when setting it
+  $("lockForgot").hidden = !has;
+  $("lockTitle").textContent = has ? "Unlock your passwords" : "Lock your passwords";
+  $("lockNote").textContent = has
+    ? "Type your lock password to see or copy saved passwords. They lock again when you close this tab."
+    : "Pick a lock password. You need it to see or copy saved passwords. AutoNod keeps working without it. If you forget it, the saved passwords can't be opened by anyone.";
+  $("lockGo").textContent = has ? "Unlock" : "Lock";
+}
+function askUnlock(then) {
+  afterUnlock = then || null;
+  lockOpen = true;
+  $("lockMsg").textContent = "";
+  renderLock();
+  $("lockPass").focus();
+}
+
+$("lockBtn").addEventListener("click", () => {
+  if (state.vault && vaultKey) { // "Lock now"
+    vaultKey = null; opened.clear(); revealed.clear(); lockOpen = false;
+    return renderVault();
+  }
+  lockOpen ? ((lockOpen = false), renderLock()) : askUnlock();
+});
+
+$("lockBox").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const pass = $("lockPass").value, msg = $("lockMsg"), go = $("lockGo");
+  msg.textContent = "";
+  if (!state.vault) {
+    if (pass.length < 6) return (msg.textContent = "Use at least 6 characters.");
+    if (pass !== $("lockPass2").value) return (msg.textContent = "The two don't match.");
+  }
+  go.disabled = true;
+  go.textContent = "…";
+  try {
+    if (!state.vault) {
+      // set the lock: make the keys, then lock every saved password
+      const { vault, key } = await Vault.create(pass);
+      const { creds = [] } = await chrome.storage.local.get("creds");
+      for (const c of creds) {
+        if (c.password != null) { c.enc = await Vault.seal(vault, c.password); delete c.password; }
+      }
+      await chrome.storage.local.set({ vault, creds });
+      state.vault = vault; state.creds = creds;
+      vaultKey = key;
+    } else {
+      vaultKey = await Vault.unlock(state.vault, pass);
+    }
+    await openAll();
+    $("lockPass").value = $("lockPass2").value = "";
+    lockOpen = false;
+    const then = afterUnlock; afterUnlock = null;
+    renderVault();
+    then?.();
+  } catch (_) {
+    msg.textContent = state.vault ? "Wrong lock password." : "Could not set the lock. Try again.";
+  } finally {
+    go.disabled = false;
+    renderLock();
+  }
+});
+
+confirmClick($("lockForgot"), "Forgot it? Remove the lock and delete saved passwords", () => {
+  vaultKey = null; opened.clear(); revealed.clear(); lockOpen = false;
+  chrome.storage.local.remove("vault");
+  chrome.storage.local.set({ creds: [] });
+});
+
+function copyRow(i, b) {
+  navigator.clipboard.writeText(plainOf(state.creds[i]) || "");
+  b = b || $("creds").querySelector(`[data-copy="${i}"]`);
+  if (!b) return;
+  b.classList.add("done");
+  b.innerHTML = I.done;
+  setTimeout(() => { b.classList.remove("done"); b.innerHTML = I.copy; }, 1500);
+}
+
 $("creds").addEventListener("click", (e) => {
   const b = e.target.closest("button");
   if (!b) return;
+  const i = +(b.dataset.show ?? b.dataset.copy);
+  const c = state.creds[i];
+  if (!c) return;
+  if (isLocked(c)) { // locked: ask once, then do what was clicked
+    if (vaultKey) return openAll().then(renderVault);
+    return askUnlock(() => (b.dataset.show !== undefined ? (revealed.add(i), renderVault()) : copyRow(i)));
+  }
   if (b.dataset.show !== undefined) {
-    const i = +b.dataset.show;
     revealed.has(i) ? revealed.delete(i) : revealed.add(i);
     renderVault();
-  } else if (b.dataset.copy !== undefined) {
-    navigator.clipboard.writeText(state.creds[+b.dataset.copy].password);
-    b.classList.add("done");
-    b.innerHTML = I.done;
-    setTimeout(() => { b.classList.remove("done"); b.innerHTML = I.copy; }, 1500);
-  }
+  } else copyRow(i, b);
 });
 
 // ---------- render everything from storage ----------
 function render() {
-  chrome.storage.local.get({ ...DEFAULTS, creds: [], stats: {}, log: [], waiting: 0 }, (s) => {
+  chrome.storage.local.get({ ...DEFAULTS, creds: [], stats: {}, log: [], waiting: 0, vault: null }, (s) => {
     if (s.creds.length !== state.creds.length) revealed.clear();
     fillSites(s.log);
     state = s;
     siteIcons = s.siteIcons !== false;
+    if (vaultKey && s.creds.some((c) => c.enc && !opened.has(c.enc))) openAll().then(renderVault); // new ones while unlocked
 
     TOGGLES.forEach((k) => ($(k).checked = !!s[k]));
     renderModes(s);

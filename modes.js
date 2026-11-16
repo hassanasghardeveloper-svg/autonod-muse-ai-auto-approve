@@ -8,13 +8,13 @@ const MODES = {
   },
   standard: {
     label: "Standard",
-    desc: "Approves cards (also post permissions) and fills Secure Store with your email + a strong password. Single deletes and Send/Post buttons wait for you.",
+    desc: "Approves cards (also post permissions) and fills Secure Store with your email + a strong password. Also presses action buttons like Share reel, Post, Upload, Send. Deletes wait for you.",
     set: { autoApprove: true, approveLevel: "standard", secureStore: true, autoFillForms: false },
   },
   autopilot: {
     label: "Autopilot",
-    desc: "Approves everything - posts, sends and deletes too - and fills login forms.",
-    set: { autoApprove: true, approveLevel: "autopilot", secureStore: true, autoFillForms: true },
+    desc: "Approves everything - posts, sends and deletes too.",
+    set: { autoApprove: true, approveLevel: "autopilot", secureStore: true, autoFillForms: false },
   },
 };
 const ALWAYS_NOTE = "Payment cards always wait for you.";

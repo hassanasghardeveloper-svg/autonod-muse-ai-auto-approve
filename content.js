@@ -1,17 +1,18 @@
 // AutoNod - content script
 (() => {
-  // Can be injected twice (manifest + background re-inject) - run only one copy per page
-  if (window.__museAutoHelper) return;
-  window.__museAutoHelper = true;
+  // Can be injected several times (manifest, background re-inject, after an update).
+  // The NEWEST copy wins: every copy sees the same page attribute, older ones stop themselves.
+  const TOKEN = Math.random().toString(36).slice(2);
+  document.documentElement.setAttribute("data-autonod-owner", TOKEN);
 
   const DEFAULTS = {
     enabled: true,
     autoApprove: true,
     preferAlways: true,
     approveLevel: "standard", // safe | standard | autopilot (set by the mode)
-    autoFillForms: false,
-    chatReply: false,
     secureStore: true,
+    approvePosts: true, // Standard: also press action buttons (Share reel, Post, Send, Upload...) - not deletes
+    openReview: true, // click Muse's "N tasks need review -> Review" bar when no card is on screen
     email: "",
     pwLength: 16,
   };
@@ -20,51 +21,76 @@
   const ALLOW_RE = /^(allow|approve|accept|confirm)\b/i;
   const ALWAYS_RE = /^(always allow|allow always|always approve)\b/i;
   const DENY_RE = /^(deny|reject|decline|don'?t\b|do not\b|block)/i;
-  const ASK_CREDS_RE = /(e-?mail|username)[\s\S]{0,200}password|password[\s\S]{0,200}(e-?mail|username)/i;
-  // Permission types (from bridge.js) that must never be auto-approved
   // ---- what waits for the user depends on the mode (approveLevel) ----
-  // Money: waits in EVERY mode
-  const MONEY_RE = /\b(pay|payment|purchase|buy|checkout|place (an |the )?order|subscribe|subscription|billing|credit card|card number|transfer|send money|donat\w*)\b/i;
-  const MONEY_POLICY_RE = /(purchase|payment|checkout|billing|order)/i;
+  // Money: waits in EVERY mode (checked on the question AND on the button that would be clicked)
+  const MONEY_RE = /\b(pay|payment|purchase|buy|checkout|place (an |the )?order|subscribe|subscription|billing|invoice|credit card|card (number|details)|cvv|cvc|transfer|send money|donat\w*|upgrade|free trial|gift card|wallet)\b|[$€£₹]\s?\d|\b(usd|eur|gbp|pkr|rs\.?)\s?\d/i;
+  const MONEY_POLICY_RE = /(purchase|payment|checkout|billing|order|invoice|charge|payout|transfer)/i;
   // Deleting: waits in Safe; in Standard only when it is the real action (not a list like "create, edit ... and delete")
   const DELETE_RE = /\b(delete|remove|erase|wipe|uninstall|cancel (my|the|your) (account|subscription))\b/i;
-  const DELETE_POLICY_RE = /[._](delete|trash|remove)\b/i;
+  const DELETE_POLICY_RE = /(delete|trash|remove|purge|erase|destroy)/i; // also batchDelete, emptyTrash
+  const SEND_POLICY_RE = /(send|reply|forward)/i; // e-mail / DMs wait in Standard
+  // "Always allow" is permanent - never for these (a one-time "Allow" instead)
+  const NO_ALWAYS_POLICY_RE = /(send|reply|forward|share|invite|comment|post|publish|upload|delete|trash|remove)/i;
   const BUNDLE_RE = /\b(create|edit|schedule|publish|post|upload|manage|update|read|view)\b/i;
   // Posting / messaging: waits in Safe only
   const ACTION_RE = /\b(post|posts|publish|send|message|messages|email|comment|reply|share|tweet|upload)\b/i;
-
   // Only the card's question is checked (not long descriptions / captions)
   const questionOf = (text) => {
     const i = text.indexOf("?");
     return (i > 0 && i < 400 ? text.slice(0, i + 1) : text.slice(0, 300));
   };
 
-  // Returns why a card must wait for the user, or "" if AutoNod may click it
-  function waitReason(text, policy, actionLabel) {
+  // One approval -> { target } (click it) or { reason } (leave it for the user), or null (no buttons)
+  function decide(n) {
+    const { always, once, action } = buttonsIn(n);
+    if (!always && !once && !action) return null;
+    const text = (n.innerText || "").replace(/\s+/g, " ");
+    const q = questionOf(text);
+    const policy = n.getAttribute("data-autonod-policy") || "";
+    const level = settings.approveLevel || "standard";
+    if (!n.hasAttribute("data-autonod-scanned")) return { text, policy, reason: "could not be read (reload the Muse tab)" };
+
+    // "Always allow" is permanent: only for low-risk cards (e.g. opening a website)
+    const okAlways = settings.preferAlways && !NO_ALWAYS_POLICY_RE.test(policy) && !ACTION_RE.test(q);
+    const target = (okAlways ? always || once : once || always) || action;
+    const label = btnText(target);
+    const d = { text, policy, target };
+
+    const money = q.match(MONEY_RE) || label.match(MONEY_RE) || policy.match(MONEY_POLICY_RE);
+    if (money) return { ...d, reason: `mentions "${money[0]}"` };
+    if (level === "autopilot") return d;
+    if (DELETE_POLICY_RE.test(policy)) return { ...d, reason: "is a delete" };
+    const del = q.match(DELETE_RE);
+    if (target === action) {
+      // Standard + "Action buttons": ANY button Muse shows instead of Allow - Share reel, Post,
+      // Publish, Upload, Send, Share, Save... is pressed. Only deleting (and money, above) waits.
+      const delBtn = label.match(DELETE_RE);
+      if (level === "standard" && settings.approvePosts && !delBtn && !(del && !BUNDLE_RE.test(q))) return d;
+      return { ...d, reason: delBtn ? `wants to "${label}"` : del ? `mentions "${del[0]}"` : `wants to "${label}"` };
+    }
+    if (level === "safe") {
+      const act = del || q.match(ACTION_RE);
+      return act ? { ...d, reason: `mentions "${act[0]}"` } : d;
+    }
+    if (SEND_POLICY_RE.test(policy) && !settings.approvePosts) return { ...d, reason: "lets Muse send messages" };
+    if (del && !BUNDLE_RE.test(q)) return { ...d, reason: `mentions "${del[0]}"` };
+    return d;
+  }
+
+  // legacy path only (no Muse marker, no policy): text rules
+  function waitReason(text) {
     const q = questionOf(text);
     const level = settings.approveLevel || "standard";
-    const money = q.match(MONEY_RE) || policy.match(MONEY_POLICY_RE);
+    const money = q.match(MONEY_RE);
     if (money) return `mentions "${money[0]}"`;
     if (level === "autopilot") return "";
-    if (actionLabel) return `wants to "${actionLabel}"`;
     const del = q.match(DELETE_RE);
-    if (policy.match(DELETE_POLICY_RE)) return "is a delete";
-    if (level === "safe") {
-      if (del) return `mentions "${del[0]}"`;
-      const act = q.match(ACTION_RE);
-      if (act) return `mentions "${act[0]}"`;
-      return "";
-    }
-    if (del && !BUNDLE_RE.test(q)) return `mentions "${del[0]}"`; // standard
-    return "";
+    if (level === "safe") { const act = del || q.match(ACTION_RE); return act ? `mentions "${act[0]}"` : ""; }
+    return del && !BUNDLE_RE.test(q) ? `mentions "${del[0]}"` : "";
   }
-  // Cards about money or deleting things are left for the user
-  const RISKY_RE = /\b(pay|payment|purchase|buy|checkout|place (an |the )?order|subscribe|subscription|billing|credit card|card number|transfer|send money|donat\w*|delete|remove|erase|wipe|uninstall|cancel (my|the|your) (account|subscription))\b/i;
-  const ASK_VERB_RE = /(provide|share|enter|send|give|need|what|which|tell|type|sign ?up|log ?in|create)/i;
+
 
   let settings = { ...DEFAULTS };
-  const handledTexts = new Set();
-  let lastReplyAt = 0;
 
   // ---------- helpers ----------
   const visible = (el) => {
@@ -152,14 +178,17 @@
   // ---------- extension-alive check ----------
   // After the extension is reloaded/updated, this old copy of the script can no longer
   // save anything. Stop working and ask for a page refresh instead of failing silently.
-  let dead = false;
+  let dead = false, observer = null, timerId = 0;
   function alive() {
     if (dead) return false;
-    try {
-      if (chrome.runtime?.id) return true;
-    } catch (_) {}
-    dead = true; // a fresh copy is injected by background.js, so just step aside quietly
-    console.log("[AutoNod] old copy stopped (extension was reloaded)");
+    let ok = false;
+    try { ok = !!chrome.runtime?.id; } catch (_) {}
+    if (ok && document.documentElement.getAttribute("data-autonod-owner") === TOKEN) return true;
+    // extension reloaded, or a newer copy took over: stop completely (no double clicks)
+    dead = true;
+    observer?.disconnect();
+    clearInterval(timerId);
+    console.log("[AutoNod] this copy stopped (newer copy took over or extension reloaded)");
     return false;
   }
 
@@ -292,7 +321,7 @@
     return d.length > 110 ? d.slice(0, 110) + "…" : d;
   }
 
-  function log(type, detail, showToast = true) {
+  function log(type, detail, showToast = true, extra = {}) {
     console.log("[AutoNod]", type, detail);
     if (showToast) {
       toast({
@@ -302,7 +331,7 @@
         group: type === "approve" ? "approve" : "",
       });
     }
-    send({ type: "saveLog", kind: type, detail, host: location.host });
+    send({ type: "saveLog", kind: type, detail, host: location.host, ...extra });
   }
 
   // background.js does the actual saving, one write at a time (no lost entries)
@@ -351,7 +380,7 @@
 
       // Money / deleting things: never auto-approve, ask the user (once per card)
       const cardText = (card.node.innerText || "").replace(/\s+/g, " ");
-      const reason = waitReason(cardText, "", "");
+      const reason = waitReason(cardText);
       if (reason) {
         waiting.add(card.node);
         if (!btn.dataset.museHelperRisky) {
@@ -366,6 +395,7 @@
       const always = card.btns.find((b) => ALWAYS_RE.test(btnText(b)));
       const once = card.btns.find((b) => ALLOW_RE.test(btnText(b)));
       const target = (settings.preferAlways ? always || once : once || always) || btn;
+      if (MONEY_RE.test(btnText(target))) { waiting.add(card.node); continue; } // e.g. "Confirm purchase"
 
       card.btns.forEach((b) => (b.dataset.museHelperClicked = String(Date.now())));
       const summary = (card.node.innerText || "").replace(/\s+/g, " ").slice(0, 140);
@@ -378,13 +408,19 @@
     return waiting.size;
   }
 
+  let legacyAt = 0, legacyWaiting = 0;
+  function legacyApproveThrottled() {
+    if (Date.now() - legacyAt < 10000) return legacyWaiting; // whole-page text scan: max every 10s
+    legacyAt = Date.now();
+    return (legacyWaiting = legacyApprove());
+  }
+
   // NEW way: use muse's own card marker (much more reliable than reading text)
   // Idea credit: "Auto Approve for Muse" by homieyangg (MIT) - github.com/homieyangg/muse-auto-approve
   // includes cards in muse's right-hand "Needs review" panel (they have their own Allow / Deny buttons)
   const CARD_SEL = '[data-testid="hatch-inline-approval-card"]';
   const PRIMARY_SEL = '[data-hatch-approval-primary-action="true"]'; // muse's real "allow" button
   const SUB_SEL = '[role="button"][aria-expanded]'; // one item inside a card that asks for several things
-  const clickedAt = new Map(); // approval id (or card text) -> last click time
 
   // Every approval on screen: a normal card, or each item of a combined card
   function museApprovals() {
@@ -413,49 +449,101 @@
     return { always, once, action };
   }
 
+  const clicks = new Map(); // approval key -> { t, tries }
+  const asked = new Set(); // cards we already told you about (survives React re-renders)
+  const keyOf = (n, text) => n.getAttribute("data-autonod-id") || text.slice(0, 200);
+
+  function askOnce(n, d) {
+    const key = keyOf(n, d.text);
+    if (asked.has(key)) return;
+    asked.add(key);
+    if (asked.size > 500) asked.clear();
+    toast({ kind: "warn", title: "Waiting for you", text: `This card ${d.reason}. Please check it in Muse.`, ms: 9000 });
+    log("error", `Skipped (needs your check): ${d.text.slice(0, 120)}`, false, { policy: d.policy });
+  }
+
+  // the real button: a split button's main part, never its ▾ menu arrow
+  const pressable = (el) =>
+    el.matches("button, [role='button']") ? el
+      : el.querySelector("button:not([aria-haspopup]), [role='button']:not([aria-haspopup])") || el;
+
   function autoApprove() {
+    document.dispatchEvent(new CustomEvent("autonod-mark")); // bridge.js refreshes ids / policies right now
     const approvals = museApprovals();
-    if (!approvals.length) return reportWaiting(legacyApprove()); // marker missing -> old way
+    if (!approvals.length) return reportWaiting(legacyApproveThrottled()); // marker missing -> old way
 
-    let waiting = 0, target = null, node = null;
+    // a click outside an open dialog can close it (e.g. Secure Store) - only act inside it
+    const modal = [...document.querySelectorAll('[role="dialog"][aria-modal="true"], dialog[open]')].find(visible);
+    let waiting = 0, pick = null;
     for (const n of approvals) {
-      const { always, once, action } = buttonsIn(n);
-      if (!always && !once && !action) continue;
-      const text = (n.innerText || "").replace(/\s+/g, " ");
-      const policy = n.getAttribute("data-autonod-policy") || "";
-
-      // Depending on the mode, some cards wait for the user. Count them for the red badge and tell the user once.
-      const isAction = !always && !once; // the main button is an action, e.g. "Send", "Post"
-      const reason = waitReason(text, policy, isAction ? btnText(action) : "");
-      if (reason) {
-        waiting++;
-        if (!n.dataset.autonodAsked) {
-          n.dataset.autonodAsked = "1";
-          toast({ kind: "warn", title: "Waiting for you", text: `This card ${reason}. Please check it in Muse.`, ms: 9000 });
-          log("error", `Skipped (needs your check): ${text.slice(0, 120)}`, false);
-        }
-        continue;
-      }
-
-      // Never click the same card twice within 5 seconds
-      const key = n.getAttribute("data-autonod-id") || text.slice(0, 200);
-      if (Date.now() - (clickedAt.get(key) || 0) < 5000) continue;
-      if (!target) {
-        target = (settings.preferAlways ? always || once : once || always) || action; // action only in Autopilot
-        node = n;
-        clickedAt.set(key, Date.now());
-      }
+      if (modal && !modal.contains(n)) continue;
+      const d = decide(n);
+      if (!d) continue;
+      if (d.reason) { waiting++; askOnce(n, d); continue; }
+      const key = keyOf(n, d.text);
+      const c = clicks.get(key) || { t: 0, tries: 0 };
+      if (Date.now() - c.t < 15000) continue; // clicked: give Muse 15s to answer
+      if (c.tries >= 2) { waiting++; askOnce(n, { ...d, reason: "did not react to AutoNod's click" }); continue; }
+      if (!pick) pick = { d, key, tries: c.tries + 1 };
     }
     reportWaiting(waiting);
-    if (!target) return;
+    if (!pick) return;
 
-    const summary = (node.innerText || "").replace(/\s+/g, " ").slice(0, 140);
-    setTimeout(() => {
-      realClick(target);
-      log("approve", `Clicked "${btnText(target)}" — ${summary}`);
-    }, 300);
-    if (clickedAt.size > 500) clickedAt.clear(); // keep memory small
+    clicks.set(pick.key, { t: Date.now(), tries: pick.tries });
+    if (clicks.size > 500) clicks.clear();
+    const el = pressable(pick.d.target);
+    realClick(el); // no setTimeout: in a hidden tab it could be held back up to a minute
+    log("approve", `Clicked "${btnText(el)}" — ${pick.d.text.slice(0, 140)}`, true, { policy: pick.d.policy });
   }
+
+
+  // ---------- 1b. Muse's "2 tasks need review  [Review]" bar ----------
+  // Cards of background tasks only show after Review is pressed. When no card is on screen
+  // but the bar is there, press Review. Same count again and still no card -> wait longer
+  // (15s, 1m, 4m, 10m). Never while you are using the Muse tab yourself.
+  const REVIEW_BAR_RE = /(\d+)\s*(tasks?|cards?|items?|approvals?)\s*needs?\s*(your\s*)?review/i;
+  let reviewAt = 0, reviewSig = "", reviewGap = 15000, reviewWarned = false, lastInput = 0;
+  for (const t of ["keydown", "pointerdown"])
+    document.addEventListener(t, (e) => { if (e.isTrusted) lastInput = Date.now(); }, true);
+
+  // find the bar by its text (cheap), then the Review button inside it
+  function findReviewBar() {
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {
+      acceptNode: (t) => (/review/i.test(t.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP),
+    });
+    for (let t = walker.nextNode(); t; t = walker.nextNode()) {
+      for (let n = t.parentElement, i = 0; n && i < 5; n = n.parentElement, i++) {
+        const txt = n.textContent || "";
+        if (txt.length > 200) break;
+        const m = txt.match(REVIEW_BAR_RE);
+        if (!m) continue;
+        const btn = [...n.querySelectorAll(CLICKABLE)].find((b) => /^review$/i.test(btnText(b)) && visible(b));
+        if (btn) return { btn, count: m[1] };
+      }
+    }
+    return null;
+  }
+
+  function openReviewPanel() {
+    if (window !== window.top) return;
+    const now = Date.now();
+    if (now - reviewAt < reviewGap) return;
+    if (!document.hidden && now - lastInput < 20000) return; // you're using Muse: don't move things
+    if ([...document.querySelectorAll(CARD_SEL)].some(visible)) return; // cards already showing
+    const bar = findReviewBar();
+    if (!bar) { reviewSig = ""; reviewGap = 15000; return; }
+    reviewGap = bar.count === reviewSig ? Math.min(reviewGap * 4, 600000) : 15000;
+    if (reviewGap >= 240000 && !reviewWarned) {
+      reviewWarned = true;
+      log("error", "Pressed Review but no card AutoNod can read appeared — Muse's page may have changed", false);
+    }
+    reviewSig = bar.count;
+    reviewAt = now;
+    realClick(bar.btn);
+    console.log("[AutoNod] pressed Review to show waiting task cards");
+    toast({ kind: "ok", title: "Opened Review", text: "Showing Muse's waiting task cards.", ms: 2500, group: "review" });
+  }
+
 
   // Tell background.js how many cards are waiting for the user -> red number on the toolbar icon
   let lastWaiting = -1;
@@ -480,10 +568,16 @@
   }
 
   function secureAddButtons() {
-    return allButtons().filter(
-      (btn) => /^(add|sign in|enter password)$/i.test(btnText(btn)) && ancestorMatching(btn, SECURE_CARD_RE, 5)
-    );
+    if (MUSE_OWN_PAGE_RE.test(location.pathname)) return [];
+    return [...document.querySelectorAll(CLICKABLE)].filter((b) => {
+      const t = (b.textContent || "").replace(/\s+/g, " ").trim(); // cheap check first
+      if (!/^(add|sign in|enter password)$/i.test(t)) return false;
+      const card = ancestorMatching(b, SECURE_CARD_RE, 5);
+      // "Sign in" also appears on connector cards (Google, Slack): require "Secure Store" for it
+      return !!card && (/^add$/i.test(t) || /secure store/i.test(card.textContent || "")) && visible(b);
+    });
   }
+
 
   const secureDialogOpen = () =>
     [...document.querySelectorAll('input[type="password"]')].some(
@@ -535,6 +629,10 @@
       const dialog =
         pwInput.closest('[role="dialog"], dialog, [aria-modal="true"]') || ancestorMatching(pwInput, SECURE_DIALOG_RE, 10);
       if (!dialog || !SECURE_DIALOG_RE.test(dialog.textContent || "")) continue;
+      // Secure Store dialogs have a Website field; Muse's own password dialogs don't
+      const hasWebsite = [...dialog.querySelectorAll("input")].some((i) => /^https?:\/\//.test(i.value)) ||
+        /\bwebsite\b/i.test(dialog.textContent || "");
+      if (!hasWebsite || MUSE_OWN_PAGE_RE.test(location.pathname)) continue;
 
       pwInput.dataset.museHelperStore = "1";
       pwInput.dataset.museHelperFilled = "1"; // keep the generic form filler away
@@ -575,7 +673,7 @@
       saveCredential(userVal, pw, `Secure Store · ${site}`);
       log("store", `Filled Secure Store for ${site} (${userVal})`);
 
-      pressEnterWithRetry(dialog, pwInput);
+      pressEnterWithRetry(dialog, pwInput, pw);
       return true;
     }
     return false;
@@ -593,34 +691,32 @@
 
   const isDisabled = (b) => b.disabled || b.getAttribute("aria-disabled") === "true";
 
-  // Click Enter; if the dialog is still open, try again (up to 6 times), then fall back to the Enter key
-  function pressEnterWithRetry(dialog, pwInput, attempt = 1) {
+  // Click Enter; if the dialog is still open, try again (up to 6 times), then fall back to the Enter key.
+  // Refills always use the SAVED password `pw` (never a new one), and never form.requestSubmit():
+  // on a form without a JS handler that navigates and puts the password in the URL.
+  function pressEnterWithRetry(dialog, pwInput, pw, attempt = 1) {
     setTimeout(() => {
+      if (!alive()) return;
       if (!dialog.isConnected || !visible(pwInput)) {
         if (attempt > 1) log("store", "Secure Store saved ✓");
         return;
       }
-      // never press Enter with an empty field (Muse shows "Please fill out this field")
       for (const inp of dialog.querySelectorAll('input:not([type="checkbox"]):not([type="hidden"])')) {
         if (!visible(inp) || inp.disabled || inp.value) continue;
-        if (inp.type === "password") typeLikeUser(inp, pwInput.value || genPassword(settings.pwLength));
+        if (inp.type === "password" || inp === pwInput) typeLikeUser(inp, pw);
         else if (settings.email) typeLikeUser(inp, settings.email);
       }
       const enter = allButtons(dialog).find((b) => /^(enter|save|submit|continue|sign in|done|ok)$/i.test(btnText(b)));
       if (enter && !isDisabled(enter)) {
         realClick(enter);
-        log("store", `Pressed Enter in Secure Store (try ${attempt})`);
+        console.log("[AutoNod] pressed Enter in Secure Store, try", attempt);
       } else {
-        // button missing/disabled: re-type the password and hit the Enter key in the field
-        const v = pwInput.value;
-        if (v) typeLikeUser(pwInput, v);
         const o = { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true };
         pwInput.dispatchEvent(new KeyboardEvent("keydown", o));
         pwInput.dispatchEvent(new KeyboardEvent("keyup", o));
-        pwInput.form?.requestSubmit?.();
       }
-      if (attempt < 6) pressEnterWithRetry(dialog, pwInput, attempt + 1);
-      else if (dialog.isConnected && visible(pwInput)) log("error", "Secure Store dialog still open — please press Enter yourself");
+      if (attempt < 6) pressEnterWithRetry(dialog, pwInput, pw, attempt + 1);
+      else log("error", "Secure Store dialog still open — please press Enter yourself");
     }, attempt === 1 ? 800 : 1200);
   }
 
@@ -629,111 +725,10 @@
     return storeReady && clickSecureStoreAdd();
   }
 
-  // ---------- 2b. fill login / signup forms ----------
   // muse.ai's own login / account pages: never touch them (could change YOUR Muse password)
   const MUSE_OWN_PAGE_RE = /\/(login|log-in|signin|sign-in|signup|sign-up|register|auth|account|settings|profile|password|reset|billing)\b/i;
-  const ownMuseField = (i) =>
-    /^(current-password|new-password)$/i.test(i.autocomplete || "") && !i.closest('[role="dialog"], dialog, [aria-modal="true"]');
-
-  function autoFillForms() {
-    if (!settings.email) return;
-    if (window === window.top && MUSE_OWN_PAGE_RE.test(location.pathname)) return;
-    const inSecureDialog = (i) => !!ancestorMatching(i, SECURE_DIALOG_RE, 10);
-    const pwFields = [...document.querySelectorAll('input[type="password"]')].filter(
-      (i) => visible(i) && !i.value && !i.dataset.museHelperFilled && !ownMuseField(i) && !(settings.secureStore && inSecureDialog(i))
-    );
-    const emailFields = [
-      ...document.querySelectorAll(
-        'input[type="email"], input[autocomplete="email"], input[autocomplete="username"], input[name*="email" i], input[id*="email" i], input[placeholder*="email" i]'
-      ),
-    ].filter((i) => visible(i) && !i.value && !i.dataset.museHelperFilled && !(settings.secureStore && inSecureDialog(i)));
-
-    if (!pwFields.length && !emailFields.length) return;
-
-    emailFields.forEach((i) => {
-      setNativeValue(i, settings.email);
-      i.dataset.museHelperFilled = "1";
-    });
-
-    if (pwFields.length) {
-      const pw = genPassword(settings.pwLength);
-      pwFields.forEach((i) => {
-        setNativeValue(i, pw); // same password in "confirm password" too
-        i.dataset.museHelperFilled = "1";
-      });
-      saveCredential(settings.email, pw, "form");
-      log("fill", `Filled form with ${settings.email} + generated password`);
-    }
-  }
-
-  // ---------- 3. reply in chat when Muse asks for email + password ----------
-  function findComposer() {
-    const c = [...document.querySelectorAll('textarea, [contenteditable="true"], [role="textbox"]')].filter(visible);
-    return c[c.length - 1] || null;
-  }
-
-  function latestCredentialRequest() {
-    const composer = findComposer();
-    const blocks = [...document.querySelectorAll("p, li, div, span")].filter((el) => {
-      if (composer && (composer === el || composer.contains(el) || el.contains(composer))) return false;
-      const t = el.innerText || "";
-      if (t.length > 1500 || !ASK_CREDS_RE.test(t) || !ASK_VERB_RE.test(t)) return false;
-      if (settings.email && t.includes(settings.email)) return false; // our own reply
-      return true;
-    });
-    // keep the innermost matches, take the last one on the page
-    const leaves = blocks.filter((el) => !blocks.some((o) => o !== el && el.contains(o)));
-    return leaves[leaves.length - 1] || null;
-  }
-
-  function typeIntoComposer(el, text) {
-    el.focus();
-    if (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) {
-      setNativeValue(el, text);
-    } else {
-      document.execCommand("selectAll", false, null);
-      document.execCommand("insertText", false, text);
-    }
-  }
-
-  function pressSend(composer) {
-    const scope = composer.closest("form") || composer.parentElement?.parentElement?.parentElement || document;
-    const send = allButtons(scope).find((b) => /send|submit/i.test(b.getAttribute("aria-label") || "") || /^send$/i.test(btnText(b))) ||
-      scope.querySelector('button[type="submit"]');
-    if (send && !send.disabled) return send.click();
-    const opts = { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true };
-    composer.dispatchEvent(new KeyboardEvent("keydown", opts));
-    composer.dispatchEvent(new KeyboardEvent("keypress", opts));
-    composer.dispatchEvent(new KeyboardEvent("keyup", opts));
-  }
-
-  function sendCredentials(manual = false) {
-    if (!settings.email) {
-      log("error", "No email set — open the extension popup and save your email.");
-      return false;
-    }
-    const composer = findComposer();
-    if (!composer) return false;
-    const pw = genPassword(settings.pwLength);
-    const msg = `Email: ${settings.email}\nPassword: ${pw}`;
-    typeIntoComposer(composer, msg);
-    setTimeout(() => pressSend(composer), 400);
-    saveCredential(settings.email, pw, manual ? "chat (manual)" : "chat");
-    log("reply", `Sent ${settings.email} + generated password in chat`);
-    lastReplyAt = Date.now();
-    return true;
-  }
-
-  function autoReplyChat() {
-    if (Date.now() - lastReplyAt < 20000) return;
-    const req = latestCredentialRequest();
-    if (!req) return;
-    const key = (req.innerText || "").trim().slice(0, 300);
-    if (handledTexts.has(key)) return;
-    handledTexts.add(key);
-    // Wait a moment so Muse finishes streaming its message
-    setTimeout(() => sendCredentials(false), 1500);
-  }
+  // (v1.15: "Fill login forms" and "Reply in chat" were removed - your sites open in Muse's
+  //  cloud browser, so those could only ever touch muse.ai itself)
 
   // ---------- main loop ----------
   let scheduled = false;
@@ -742,10 +737,11 @@
     if (!alive()) return;
     if (!settings.enabled) return reportWaiting(0);
     try {
-      if (settings.autoApprove) autoApprove();
-      const storeBusy = settings.secureStore && secureStore();
-      if (settings.autoFillForms) autoFillForms();
-      if (settings.chatReply && !storeBusy) autoReplyChat();
+      if (settings.autoApprove) {
+        autoApprove();
+        if (settings.openReview) openReviewPanel();
+      }
+      if (settings.secureStore) secureStore();
     } catch (e) {
       console.warn("[AutoNod]", e);
     }
@@ -757,20 +753,25 @@
     }
   };
 
+  // only NEW elements can be new cards or bars (streamed text and our own toasts can't)
+  function onMutations(list) {
+    for (const m of list)
+      for (const node of m.addedNodes)
+        if (node.nodeType === 1 && node.id !== "autonod-toasts") return schedule();
+  }
+
   chrome.storage.local.get(DEFAULTS, (s) => {
     settings = { ...DEFAULTS, ...s };
     console.log("[AutoNod] running on", location.href, settings.enabled ? "(enabled)" : "(disabled)");
-    // Don't auto-reply to requests that were already on the page before load
-    const existing = latestCredentialRequest();
-    if (existing) handledTexts.add((existing.innerText || "").trim().slice(0, 300));
     // let the chat history finish loading so "newest card" really is the newest
     setTimeout(() => (storeReady = true), 3000);
     if (settings.enabled) {
       const lvl = settings.approveLevel || "standard";
       toast({ kind: "ok", title: "AutoNod is on", text: `${lvl[0].toUpperCase() + lvl.slice(1)} mode`, ms: 2500 });
     }
-    new MutationObserver(schedule).observe(document.documentElement, { childList: true, subtree: true });
-    setInterval(schedule, 2000);
+    observer = new MutationObserver(onMutations);
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+    timerId = setInterval(schedule, 2000);
     schedule();
   });
 
@@ -780,8 +781,15 @@
   });
 
   chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
+    // background.js wakes us every 30s: Chrome slows our own timers to once a minute in hidden /
+    // minimized tabs, but a message from the extension still runs right away
+    if (!alive()) return;
+    if (msg?.type === "tick") {
+      tick();
+      if (window === window.top) reply({ ok: true }); // answer once per tab (background re-injects if nobody answers)
+      return;
+    }
     if (window !== window.top) return;
     if (msg?.type === "ping") reply({ ok: true });
-    if (msg?.type === "sendCredentials") reply({ ok: sendCredentials(true) });
   });
 })();

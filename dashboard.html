@@ -112,6 +112,15 @@
     .ibtn { border: 1px solid var(--line-2); background: var(--surface); color: var(--muted); width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; cursor: pointer; transition: color .15s, border-color .15s, background .15s; }
     .ibtn:hover { color: var(--accent); border-color: var(--accent); }
     .ibtn.done { color: var(--ok); border-color: var(--ok); background: var(--ok-bg); }
+    .lockbtn { border: 1px solid var(--line-2); background: var(--bg); color: var(--ink); font-weight: 600; height: 34px; padding: 0 14px; border-radius: 10px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+    .lockbtn:hover { border-color: var(--accent); }
+    .lockbox { margin-bottom: 14px; }
+    .lockrow { display: flex; gap: 10px; padding: 0 16px; flex-wrap: wrap; }
+    .lockrow .inp { flex: 1 1 180px; width: auto; }
+    .lockgo { height: 40px; padding: 0 18px; border: 0; border-radius: 10px; background: var(--accent); color: var(--accent-ink); font-weight: 600; cursor: pointer; }
+    .lockgo:disabled { opacity: .6; cursor: default; }
+    .lockmsg { padding: 8px 16px 0; font-size: 13px; color: var(--red); min-height: 18px; }
+    .lockbox .danger { padding: 4px 16px 14px; font-size: 13px; }
     .danger { border: 0; background: none; color: var(--muted); font-weight: 600; cursor: pointer; }
     .danger:hover, .danger.sure { color: var(--red); }
 
@@ -221,7 +230,18 @@
 
       <!-- PASSWORDS -->
       <section class="view" id="vault" hidden>
-        <div class="h"><div><h1>Passwords</h1><p>Made by AutoNod for Secure Store logins, saved in this Chrome only</p></div><button class="danger" id="clearCreds">Clear all</button></div>
+        <div class="h"><div><h1>Passwords</h1><p>Made by AutoNod for Secure Store logins, saved in this Chrome only</p></div><div style="display:flex;gap:14px;align-items:center"><button class="lockbtn" id="lockBtn">Lock passwords</button><button class="danger" id="clearCreds">Clear all</button></div></div>
+        <form class="box card lockbox" id="lockBox" hidden autocomplete="off">
+          <div class="hd" id="lockTitle">Lock your passwords</div>
+          <p class="note" id="lockNote">Pick a lock password. You need it to see or copy saved passwords. AutoNod keeps working without it. If you forget it, the saved passwords can't be opened by anyone.</p>
+          <div class="lockrow">
+            <input class="inp" type="password" id="lockPass" placeholder="Lock password" autocomplete="new-password" />
+            <input class="inp" type="password" id="lockPass2" placeholder="Type it again" autocomplete="new-password" />
+            <button class="lockgo" id="lockGo" type="submit">Lock</button>
+          </div>
+          <div class="lockmsg" id="lockMsg"></div>
+          <button class="danger" id="lockForgot" type="button" hidden>Forgot it? Remove the lock and delete saved passwords</button>
+        </form>
         <div class="box">
           <div class="vrow head"><span></span><span>Site</span><span>Email</span><span>Made</span><span>Password</span><span></span></div>
           <div id="creds"></div>
@@ -257,9 +277,9 @@
               <div class="hd">What AutoNod clicks</div>
               <label class="row"><div>Auto approve<small>Clicks Allow on approval cards.</small></div><input type="checkbox" class="sw" id="autoApprove" /></label>
               <label class="row"><div>Prefer "Always allow"<small>Fewer cards next time on the same site.</small></div><input type="checkbox" class="sw" id="preferAlways" /></label>
+              <label class="row"><div>Action buttons<small>Standard: also presses Share reel, Post, Publish, Upload, Send... Delete and payment buttons still wait.</small></div><input type="checkbox" class="sw" id="approvePosts" /></label>
+              <label class="row"><div>Open "Review" by itself<small>Presses Muse's "tasks need review" bar so hidden cards show up.</small></div><input type="checkbox" class="sw" id="openReview" /></label>
               <label class="row"><div>Secure Store auto-fill<small>Your email and a new strong password, then Enter.</small></div><input type="checkbox" class="sw" id="secureStore" /></label>
-              <label class="row"><div>Fill login forms<small>Only forms inside Muse tasks, never Muse's own pages.</small></div><input type="checkbox" class="sw" id="autoFillForms" /></label>
-              <label class="row"><div>Reply in chat<small>Sends email and password when Muse asks in chat. Not recommended.</small></div><input type="checkbox" class="sw" id="chatReply" /></label>
               <label class="row" style="cursor:default"><div>Payments and checkout<small>Never clicked, in every mode.</small></div><input type="checkbox" class="sw" disabled aria-label="Payments are never clicked" /></label>
             </div>
             <div class="box card">
@@ -274,6 +294,7 @@
 
   <script src="modes.js"></script>
   <script src="feed.js"></script>
+  <script src="vault.js"></script>
   <script src="dashboard.js"></script>
 </body>
 </html>

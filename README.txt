@@ -1,11 +1,11 @@
-AutoNod - Auto Approve for Muse  (v1.14.0)
+AutoNod - Auto Approve for Muse  (v1.15.0)
 ==========================================
 Unofficial helper for Muse. Not made by or affiliated with Muse. Free.
 
 WHAT IT DOES
 - Auto-clicks "Allow" / "Always allow" on Muse approval cards
-- Payment / delete / purchase cards and actions like "Send" or "Post" are NEVER
-  clicked - they wait for you, and a red number shows on the AutoNod icon
+- Payment / purchase cards are NEVER clicked, and delete cards wait in
+  Safe + Standard - a red number shows on the AutoNod icon
 - Secure Store cards: clicks Add, puts YOUR email in Username,
   generates a strong password, and presses Enter
 - Keeps every generated password (hidden, click to copy)
@@ -19,9 +19,11 @@ WHAT IT DOES
 MODES (pick one in the popup)
 - Safe       approves website cards only; posts, messages, deletes wait
 - Standard   + post permissions (e.g. Facebook "create, edit, publish ...")
-             + fills Secure Store. Single deletes and Send/Post buttons wait.
+             + presses ANY action button Muse shows: Share reel, Post,
+               Publish, Upload, Send, Share, Save...
+             + fills Secure Store. Only delete buttons wait.
              (recommended)
-- Autopilot  approves everything (posts, sends, deletes) + fills login forms
+- Autopilot  approves everything (posts, sends, deletes)
 Payment / checkout cards ALWAYS wait for you, in every mode.
 Single switches are in the dashboard: Settings > What AutoNod clicks.
 
@@ -37,13 +39,23 @@ INSTALL (2 minutes)
    You should see "AutoNod is on" in the bottom-left corner.
 
 IMPORTANT
+- Presses Muse's "N tasks need review > Review" bar by itself when no card is
+  on screen (not while you are typing in Muse).
+- Keeps working when the Muse tab is in the background or the window is
+  minimized: Chrome is told not to throw the tab away, and AutoNod wakes it
+  every 30 seconds. Tip: chrome://settings/performance > "Always keep these
+  sites active" > add muse.ai.
+- When a card waits for you, a Windows notification pops up (click it to open
+  the Muse tab).
 - The popup shows "Working on this muse.ai tab" in green. If it says
   "Not running on this tab", click Reconnect.
 - If Muse ignores the automatic "Add" click, an orange message asks you
   to click Add yourself; the extension then fills everything and presses Enter.
 - Auto-approve skips your manual check. Only use it for tasks you trust.
-- Passwords are stored in this Chrome only (not encrypted), never sent anywhere. Anyone who
-  uses this computer can open the dashboard and see them.
+- Passwords are stored in this Chrome only, never sent anywhere.
+  LOCK THEM: Dashboard > Passwords > "Lock passwords" > pick a lock password.
+  After that they are saved encrypted; you need the lock password to see or
+  copy them (AutoNod keeps working without it). Forget it = they can't be opened.
 - CAPTCHAs ("I'm not a robot") must still be done by you.
 
 CREDITS
