@@ -579,10 +579,20 @@
   }
 
 
+  // Password inputs: type="password", OR a text input that is clearly a password field
+  // (Muse's "Create a password" field can be type="text" when the eye toggle shows it)
+  function pwCandidates() {
+    return [...document.querySelectorAll('input:not([type="checkbox"]):not([type="hidden"]):not([type="radio"])')].filter((i) => {
+      if (i.type === "password" || i.dataset.museHelperStore) return true;
+      const hints = `${i.placeholder || ""} ${i.name || ""} ${i.id || ""} ${i.autocomplete || ""} ${i.getAttribute("aria-label") || ""}`;
+      if (/pass(word)?/i.test(hints)) return true;
+      const label = i.parentElement && (i.parentElement.textContent || "").trim();
+      return !!label && /^password/i.test(label);
+    });
+  }
+
   const secureDialogOpen = () =>
-    [...document.querySelectorAll('input[type="password"]')].some(
-      (i) => visible(i) && ancestorMatching(i, SECURE_DIALOG_RE, 10)
-    );
+    pwCandidates().some((i) => visible(i) && ancestorMatching(i, SECURE_DIALOG_RE, 10));
 
   // Step 1: click "Add" on the NEWEST pending Secure Store card.
   // Completed cards change to "Added", so any card still showing "Add" is still waiting.
@@ -622,7 +632,7 @@
 
   // Step 2: fill the "Secure credentials store" dialog and press Enter
   function fillSecureDialog() {
-    for (const pwInput of document.querySelectorAll('input[type="password"], input[data-muse-helper-store]')) {
+    for (const pwInput of pwCandidates()) {
       if (!visible(pwInput)) continue;
       // already filled by us and still showing our value -> the Enter retry loop is handling it
       if (pwInput.dataset.museHelperStore && pwInput.value) continue;
@@ -630,8 +640,9 @@
         pwInput.closest('[role="dialog"], dialog, [aria-modal="true"]') || ancestorMatching(pwInput, SECURE_DIALOG_RE, 10);
       if (!dialog || !SECURE_DIALOG_RE.test(dialog.textContent || "")) continue;
       // Secure Store dialogs have a Website field; Muse's own password dialogs don't
+      // (Website can be plain text now: textContent reads "Websitehttps://..." so no \b here)
       const hasWebsite = [...dialog.querySelectorAll("input")].some((i) => /^https?:\/\//.test(i.value)) ||
-        /\bwebsite\b/i.test(dialog.textContent || "");
+        /website|https?:\/\//i.test(dialog.textContent || "");
       if (!hasWebsite || MUSE_OWN_PAGE_RE.test(location.pathname)) continue;
 
       pwInput.dataset.museHelperStore = "1";
@@ -666,6 +677,7 @@
       if (!pwInput.value) typeLikeUser(pwInput, pw);
       const userVal =
         [...dialog.querySelectorAll('input:not([type="password"]):not([type="checkbox"])')]
+          .filter((i) => i !== pwInput)
           .map((i) => i.value.trim())
           .find((v) => v && !/^https?:\/\//.test(v)) ||
         ((text.match(/Username\s*(.+?)\s*Password/) || [])[1]) ||

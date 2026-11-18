@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AutoNod - Auto Approve for Muse",
-  "version": "1.15.0",
+  "version": "1.15.1",
   "description": "Unofficial helper for Muse: auto-approves safe approval cards and fills Secure Store logins with your email + a strong password. Not affiliated with Muse.",
   "permissions": [
     "storage",
